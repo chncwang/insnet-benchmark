@@ -34,19 +34,16 @@ using std::make_unique;
 using std::move;
 using std::default_random_engine;
 using std::shuffle;
+using std::chrono::high_resolution_clock;
+using std::chrono::milliseconds;
+using std::chrono::duration_cast;
+using std::chrono::duration;
 using n3ldg_plus::dtype;
 using n3ldg_plus::Vocab;
 using n3ldg_plus::Graph;
 using n3ldg_plus::Node;
 
 constexpr int MODEL_TYPE_TRANSFORMER = 0;
-
-void printIds(const vector<int> &ids, Vocab &vocab) {
-    for (int id : ids) {
-        cout << vocab.from_id(id) << " ";
-    }
-    cout << endl;
-}
 
 int main(int argc, const char *argv[]) {
     Options options("N3LDG++ benchmark");
@@ -180,6 +177,7 @@ int main(int argc, const char *argv[]) {
     cout << fmt::format("lr:{}", lr) << endl;
     n3ldg_plus::AdamOptimzer optimizer(params->tunableParams(), lr);
     int iteration = -1;
+    const int BENCHMARK_BEGIN_ITER = 100;
 
     for (int epoch = 0; ; ++epoch) {
         default_random_engine engine(0);
@@ -188,8 +186,15 @@ int main(int argc, const char *argv[]) {
         auto batch_begin = train_conversation_pairs.begin();
         int batch_size = args["batch_size"].as<int>();
         dtype dropout = args["dropout"].as<dtype>();
+
+        decltype(high_resolution_clock::now()) begin_time;
+        int word_sum_for_benchmark = 0;
+
         while (batch_begin != train_conversation_pairs.end()) {
             ++iteration;
+            if (iteration == BENCHMARK_BEGIN_ITER) {
+                begin_time = high_resolution_clock::now();
+            }
             auto batch_it = batch_begin;
             int word_sum = 0;
             int tgt_word_sum = 0;
@@ -206,6 +211,10 @@ int main(int argc, const char *argv[]) {
                 word_sum += batch_tgt_in_ids.size();
                 tgt_word_sum += batch_tgt_in_ids.size();
 
+                if (iteration >= BENCHMARK_BEGIN_ITER) {
+                    word_sum_for_benchmark += batch_tgt_in_ids.size() + batch_src_ids.size();
+                }
+
                 Node *p;
                 if (model_type == MODEL_TYPE_TRANSFORMER) {
                     p = transformerSeq2seq(batch_src_ids, batch_tgt_in_ids, graph, *params,
@@ -220,16 +229,28 @@ int main(int argc, const char *argv[]) {
             graph.forward();
             dtype loss = n3ldg_plus::NLLoss(probs, vocab.size(), answers, 1.0f);
             if (iteration % 100 == 0) {
-                cout << fmt::format("loss:{} sentence size:{} ppl:{}", loss, sentence_size,
+                cout << fmt::format("loss:{} sentence number:{} ppl:{}", loss, sentence_size,
                         std::exp(loss / tgt_word_sum)) << endl;
-                printIds(src_ids.at(batch_begin->post_id), vocab);
-                printIds(tgt_in_ids.at(batch_begin->response_id), vocab);
-                printIds(tgt_out_ids.at(batch_begin->response_id), vocab);
             }
             graph.backward();
             optimizer.step();
 
+            if (iteration % 100 == 0 && iteration >= BENCHMARK_BEGIN_ITER) {
+                auto now = high_resolution_clock::now();
+                auto elapsed_time = duration_cast<milliseconds>(now -
+                        begin_time);
+                float word_count_per_sec = 1e3 * word_sum_for_benchmark /
+                    static_cast<float>(elapsed_time.count());
+                cout << fmt::format("epoch:{} iteration:{} word_count_per_sec:{} word count:{} time:{}",
+                        epoch, iteration, word_count_per_sec, word_sum_for_benchmark,
+                        elapsed_time.count()) << endl;
+            }
+
             batch_begin = batch_it;
+            if (word_sum_for_benchmark > 1000000) {
+                cout << "benchmakr end" << endl;
+                exit(0);
+            }
         }
     }
 
