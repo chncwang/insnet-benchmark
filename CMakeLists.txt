@@ -1,0 +1,40 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 3.8)
+PROJECT(n3ldg_plus_benchmark)
+
+SET(CMAKE_CXX_COMPILER /usr/bin/c++)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_FAST_MATH -Wall -Wno-sign-compare")
+
+if(CMAKE_BUILD_TYPE MATCHES debug)
+    ADD_DEFINITIONS(-DN3LDG_DEBUG)
+    SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -msse3 -std=c++14 -O1" )
+elseif(CMAKE_BUILD_TYPE MATCHES profile)
+    SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -std=c++14 -O2 -pg -DNDEBUG" )
+else()
+    SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -fPIC -std=c++14 -Ofast -march=native" )
+endif()
+
+SET(Boost_USE_STATIC_LIBS OFF) 
+SET(Boost_USE_MULTITHREADED ON)  
+SET(Boost_USE_STATIC_RUNTIME OFF) 
+FIND_PACKAGE(Boost REQUIRED COMPONENTS regex system filesystem) 
+MESSAGE("boost includes:" ${Boost_INCLUDE_DIRS})
+MESSAGE("boost include:" ${Boost_INCLUDE_DIR})
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS}) 
+
+INCLUDE_DIRECTORIES(3rd/cxxopts/include src)
+INCLUDE_DIRECTORIES(3rd/inih)
+INCLUDE_DIRECTORIES(3rd/tinyutf8)
+
+if(USE_CUDA)
+    add_definitions(-DUSE_GPU)
+endif()
+
+
+ADD_SUBDIRECTORY(3rd/n3ldg-plus)
+AUX_SOURCE_DIRECTORY(src/ SRCS)
+ADD_EXECUTABLE(main ${SRCS})
+
+TARGET_LINK_LIBRARIES(main n3ldg_plus)
+TARGET_LINK_LIBRARIES(main pthread ${LIBS})
+TARGET_LINK_LIBRARIeS(main ${Boost_LIBRARIES})
