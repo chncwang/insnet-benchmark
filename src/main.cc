@@ -32,6 +32,8 @@ using std::unordered_set;
 using std::unique_ptr;
 using std::make_unique;
 using std::move;
+using std::pair;
+using std::make_pair;
 using std::default_random_engine;
 using std::shuffle;
 using std::chrono::high_resolution_clock;
@@ -44,6 +46,23 @@ using n3ldg_plus::Graph;
 using n3ldg_plus::Node;
 
 constexpr int MODEL_TYPE_TRANSFORMER = 0;
+
+pair<float, float> sentenceLenStat(const vector<vector<string>> &sentences) {
+    float sum = 0;
+    for (const auto &s : sentences) {
+        sum += s.size();
+    }
+    float mean = sum / sentences.size();
+
+    sum = 0;
+    for (const auto &s : sentences) {
+        float x = s.size() - mean;
+        sum += x * x;
+    }
+    float sd = std::sqrt(sum / sentences.size());
+
+    return make_pair(mean, sd);
+}
 
 int main(int argc, const char *argv[]) {
     Options options("N3LDG++ benchmark");
@@ -79,8 +98,12 @@ int main(int argc, const char *argv[]) {
 
     string post_file = args["post"].as<string>();
     vector<vector<string>> post_sentences = readSentences(post_file);
+    auto post_stat = sentenceLenStat(post_sentences);
+    cout << fmt::format("post mean:{} sd:{}", post_stat.first, post_stat.second) << endl;
     string response_file = args["response"].as<string>();
     vector<vector<string>> response_sentences = readSentences(response_file);
+    auto res_stat = sentenceLenStat(response_sentences);
+    cout << fmt::format("response mean:{} sd:{}", res_stat.first, res_stat.second) << endl;
 
     vector<vector<string>> all_sentences;
     for (auto &p : train_conversation_pairs) {
@@ -241,14 +264,15 @@ int main(int argc, const char *argv[]) {
                         begin_time);
                 float word_count_per_sec = 1e3 * word_sum_for_benchmark /
                     static_cast<float>(elapsed_time.count());
-                cout << fmt::format("epoch:{} iteration:{} word_count_per_sec:{} word count:{} time:{}",
+                cout << fmt::format("epoch:{} iteration:{} word_count_per_sec:{} word count:{} time:{} step time:{}",
                         epoch, iteration, word_count_per_sec, word_sum_for_benchmark,
-                        elapsed_time.count()) << endl;
+                        elapsed_time.count(),
+                        elapsed_time.count() / (iteration + 1 - BENCHMARK_BEGIN_ITER)) << endl;
             }
 
             batch_begin = batch_it;
             if (word_sum_for_benchmark > 1000000) {
-                cout << "benchmakr end" << endl;
+                cout << "benchmark end" << endl;
                 exit(0);
             }
         }
