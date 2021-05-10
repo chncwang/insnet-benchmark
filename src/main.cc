@@ -44,6 +44,7 @@ using n3ldg_plus::dtype;
 using n3ldg_plus::Vocab;
 using n3ldg_plus::Graph;
 using n3ldg_plus::Node;
+using n3ldg_plus::Profiler;
 
 constexpr int MODEL_TYPE_TRANSFORMER = 0;
 
@@ -69,6 +70,8 @@ int main(int argc, const char *argv[]) {
     options.add_options()
         ("model", "model type where 0 means Transformer and 1 means LSTM",
          cxxopts::value<int>()->default_value("0"))
+        ("profile", "whether enable profiler",
+         cxxopts::value<bool>()->default_value("false"))
         ("device_id", "device id", cxxopts::value<int>()->default_value("0"))
         ("train", "training set file", cxxopts::value<string>())
         ("post", "post file", cxxopts::value<string>())
@@ -92,7 +95,8 @@ int main(int argc, const char *argv[]) {
 
     vector<PostAndResponses> train_post_and_responses = readPostAndResponsesVector(
             train_pair_file);
-    vector<ConversationPair> train_conversation_pairs = toConversationPairs(train_post_and_responses);
+    vector<ConversationPair> train_conversation_pairs = toConversationPairs(
+            train_post_and_responses);
 
     cout << "train size:" << train_conversation_pairs.size() << endl;
 
@@ -213,6 +217,10 @@ int main(int argc, const char *argv[]) {
         decltype(high_resolution_clock::now()) begin_time;
         int word_sum_for_benchmark = 0;
 
+        Profiler &profiler = Profiler::Ins();
+        bool enable_profile = args["profile"].as<bool>();
+        cout << fmt::format("enable profile:{}", enable_profile) << endl;
+
         while (batch_begin != train_conversation_pairs.end()) {
             ++iteration;
             if (iteration == BENCHMARK_BEGIN_ITER) {
@@ -225,6 +233,12 @@ int main(int argc, const char *argv[]) {
             Graph graph;
             vector<Node *> probs;
             vector<vector<int>> answers;
+
+            if (iteration == BENCHMARK_BEGIN_ITER) {
+                profiler.SetEnabled(enable_profile);
+                profiler.BeginEvent("top");
+            }
+            profiler.BeginEvent("graph building");
 
             int sentence_size = 0;
             while (word_sum < batch_size && batch_it != train_conversation_pairs.end()) {
@@ -248,6 +262,7 @@ int main(int argc, const char *argv[]) {
                 ++batch_it;
                 ++sentence_size;
             }
+            profiler.EndEvent();
 
             graph.forward();
             dtype loss = n3ldg_plus::NLLoss(probs, vocab.size(), answers, 1.0f);
@@ -256,7 +271,9 @@ int main(int argc, const char *argv[]) {
                         std::exp(loss / tgt_word_sum)) << endl;
             }
             graph.backward();
+            profiler.BeginEvent("optimize");
             optimizer.step();
+            profiler.EndCudaEvent();
 
             if (iteration % 100 == 0 && iteration >= BENCHMARK_BEGIN_ITER) {
                 auto now = high_resolution_clock::now();
@@ -273,6 +290,8 @@ int main(int argc, const char *argv[]) {
             batch_begin = batch_it;
             if (word_sum_for_benchmark > 1000000) {
                 cout << "benchmark end" << endl;
+                profiler.EndEvent();
+                profiler.Print();
                 exit(0);
             }
         }
