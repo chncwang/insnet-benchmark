@@ -5,11 +5,11 @@
 
 class TransformerParams : public ModelParams {
 public:
-    void init(const n3ldg_plus::Vocab &vocab, int hidden_dim, int layer) override {
+    void init(const n3ldg_plus::Vocab &vocab, int hidden_dim, int layer, int head) {
         ModelParams::init(vocab, hidden_dim, layer);
 
-        encoder.init(layer, hidden_dim, 8, 100);
-        decoder.init(layer, hidden_dim, 8, 100);
+        encoder.init(layer, hidden_dim, head, 100);
+        decoder.init(layer, hidden_dim, head, 100);
     }
 
     n3ldg_plus::TransformerEncoderParams encoder;

@@ -9,7 +9,7 @@ class ModelParams : public n3ldg_plus::TunableParamCollection
 #endif
 {
 public:
-    virtual void init(const n3ldg_plus::Vocab &vocab, int hidden_dim, int layer) {
+    void init(const n3ldg_plus::Vocab &vocab, int hidden_dim, int layer) {
         embedding.init(vocab, hidden_dim);
     }
 

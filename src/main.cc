@@ -80,6 +80,7 @@ int main(int argc, const char *argv[]) {
         ("dropout", "dropout", cxxopts::value<dtype>()->default_value("0.1"))
         ("lr", "learning rate", cxxopts::value<dtype>()->default_value("0.001"))
         ("layer", "layer", cxxopts::value<int>()->default_value("3"))
+        ("head", "head", cxxopts::value<int>()->default_value("8"))
         ("hidden_dim", "hidden dim", cxxopts::value<int>()->default_value("512"));
 
     auto args = options.parse(argc, argv);
@@ -193,12 +194,13 @@ int main(int argc, const char *argv[]) {
 
     unique_ptr<ModelParams> params;
     int model_type = args["model"].as<int>();
-    if (model_type == 0) {
-        params = make_unique<TransformerParams>();
-    }
     int hidden_dim = args["hidden_dim"].as<int>();
     int layer = args["layer"].as<int>();
-    params->init(vocab, hidden_dim, layer);
+    if (model_type == 0) {
+        int head = args["head"].as<int>();
+        params = make_unique<TransformerParams>();
+        dynamic_cast<TransformerParams &>(*params).init(vocab, hidden_dim, layer, head);
+    }
 
     dtype lr = args["lr"].as<dtype>();
     cout << fmt::format("lr:{}", lr) << endl;
@@ -275,7 +277,8 @@ int main(int argc, const char *argv[]) {
             optimizer.step();
             profiler.EndCudaEvent();
 
-            if (iteration % 100 == 0 && iteration >= BENCHMARK_BEGIN_ITER) {
+            if ((iteration % 100 == 0 && iteration >= BENCHMARK_BEGIN_ITER) ||
+                    word_sum_for_benchmark > 4000000) {
                 auto now = high_resolution_clock::now();
                 auto elapsed_time = duration_cast<milliseconds>(now -
                         begin_time);
@@ -288,7 +291,7 @@ int main(int argc, const char *argv[]) {
             }
 
             batch_begin = batch_it;
-            if (word_sum_for_benchmark > 1000000) {
+            if (word_sum_for_benchmark > 4000000) {
                 cout << "benchmark end" << endl;
                 profiler.EndEvent();
                 profiler.Print();
