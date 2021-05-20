@@ -13,13 +13,12 @@ n3ldg_plus::Node *transformerSeq2seq(const std::vector<int> &src_ids,
     using n3ldg_plus::Node;
     Node *emb = n3ldg_plus::embedding(graph, src_ids, params.embedding.E);
     TransformerParams &transformer_params = dynamic_cast<TransformerParams &>(params);
-    Node *enc = n3ldg_plus::transformerEncoder(*emb, src_ids.size(), transformer_params.encoder,
-            dropout).back();
+    Node *enc = n3ldg_plus::transformerEncoder(*emb, transformer_params.encoder, dropout).back();
     Node *dec_emb = n3ldg_plus::embedding(graph, tgt_in_ids, params.embedding.E);
-    Node *dec = n3ldg_plus::transformerDecoder(*enc, src_ids.size(), *dec_emb, tgt_in_ids.size(),
-            transformer_params.decoder, dropout).back();
+    Node *dec = n3ldg_plus::transformerDecoder(*enc, *dec_emb, transformer_params.decoder,
+            dropout).back();
     dec = n3ldg_plus::linear(*dec, params.embedding.E);
-    dec = n3ldg_plus::softmax(*dec, tgt_in_ids.size());
+    dec = n3ldg_plus::softmax(*dec, params.embedding.size());
     return dec;
 }
 

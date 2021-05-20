@@ -132,7 +132,7 @@ int main(int argc, const char *argv[]) {
 
     vector<string> word_list;
     for (const auto &it : word_count_map) {
-        if (it.second >= 1000) {
+        if (it.second >= 0) {
             word_list.push_back(it.first);
         }
     }
