@@ -1,5 +1,5 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.8)
-PROJECT(n3ldg_plus_benchmark)
+PROJECT(insnet_benchmark)
 
 SET(CMAKE_CXX_COMPILER /usr/bin/c++)
 
@@ -35,6 +35,6 @@ ADD_SUBDIRECTORY(3rd/n3ldg-plus)
 AUX_SOURCE_DIRECTORY(src/ SRCS)
 ADD_EXECUTABLE(main ${SRCS})
 
-TARGET_LINK_LIBRARIES(main n3ldg_plus)
+TARGET_LINK_LIBRARIES(main insnet)
 TARGET_LINK_LIBRARIES(main pthread ${LIBS})
 TARGET_LINK_LIBRARIeS(main ${Boost_LIBRARIES})

@@ -1,6 +1,6 @@
 [submodule "3rd/N3LDG-plus"]
 	path = 3rd/n3ldg-plus
-	url = https://github.com/chncwang/N3LDG-plus
+	url = https://github.com/chncwang/insnet
 [submodule "3rd/cxxopts"]
 	path = 3rd/cxxopts
 	url = https://github.com/jarro2783/cxxopts

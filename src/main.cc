@@ -1,5 +1,5 @@
 #include "cxxopts.hpp"
-#include "n3ldg-plus/n3ldg-plus.h"
+#include "insnet/insnet.h"
 #include <unistd.h>
 #include <chrono>
 #include <algorithm>
@@ -40,11 +40,11 @@ using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 using std::chrono::duration_cast;
 using std::chrono::duration;
-using n3ldg_plus::dtype;
-using n3ldg_plus::Vocab;
-using n3ldg_plus::Graph;
-using n3ldg_plus::Node;
-using n3ldg_plus::Profiler;
+using insnet::dtype;
+using insnet::Vocab;
+using insnet::Graph;
+using insnet::Node;
+using insnet::Profiler;
 
 constexpr int MODEL_TYPE_TRANSFORMER = 0;
 
@@ -66,7 +66,7 @@ pair<float, float> sentenceLenStat(const vector<vector<string>> &sentences) {
 }
 
 int main(int argc, const char *argv[]) {
-    Options options("N3LDG++ benchmark");
+    Options options("InsNet benchmark");
     options.add_options()
         ("model", "model type where 0 means Transformer and 1 means LSTM",
          cxxopts::value<int>()->default_value("0"))
@@ -81,7 +81,8 @@ int main(int argc, const char *argv[]) {
         ("lr", "learning rate", cxxopts::value<dtype>()->default_value("0.001"))
         ("layer", "layer", cxxopts::value<int>()->default_value("3"))
         ("head", "head", cxxopts::value<int>()->default_value("8"))
-        ("hidden_dim", "hidden dim", cxxopts::value<int>()->default_value("512"));
+        ("hidden_dim", "hidden dim", cxxopts::value<int>()->default_value("512"))
+        ("cutoff", "cutoff", cxxopts::value<int>()->default_value("0"));
 
     auto args = options.parse(argc, argv);
 
@@ -89,7 +90,7 @@ int main(int argc, const char *argv[]) {
     cout << fmt::format("device_id:{}", device_id) << endl;
 
 #if USE_GPU
-    n3ldg_plus::cuda::initCuda(device_id, 0);
+    insnet::cuda::initCuda(device_id, 0);
 #endif
 
     string train_pair_file = args["train"].as<string>();
@@ -110,17 +111,17 @@ int main(int argc, const char *argv[]) {
     auto res_stat = sentenceLenStat(response_sentences);
     cout << fmt::format("response mean:{} sd:{}", res_stat.first, res_stat.second) << endl;
 
-    vector<vector<string>> all_sentences;
+    vector<vector<string> *> all_sentences;
     for (auto &p : train_conversation_pairs) {
         auto &s = response_sentences.at(p.response_id);
-        all_sentences.push_back(s);
+        all_sentences.push_back(&s);
         auto &s2 = post_sentences.at(p.post_id);
-        all_sentences.push_back(s2);
+        all_sentences.push_back(&s2);
     }
 
     unordered_map<string, int> word_count_map;
     for (const auto &s : all_sentences) {
-        for (const string &w : s) {
+        for (const string &w : *s) {
             auto it = word_count_map.find(w);
             if (it == word_count_map.end()) {
                 word_count_map.insert(make_pair(w, 1));
@@ -130,13 +131,14 @@ int main(int argc, const char *argv[]) {
         }
     }
 
+    int cutoff = args["cutoff"].as<int>();
     vector<string> word_list;
     for (const auto &it : word_count_map) {
-        if (it.second >= 0) {
+        if (it.second >= cutoff) {
             word_list.push_back(it.first);
         }
     }
-    word_list.push_back(n3ldg_plus::UNKNOWN_WORD);
+    word_list.push_back(insnet::UNKNOWN_WORD);
     word_list.push_back(BEGIN_SYMBOL);
     word_list.push_back(STOP_SYMBOL);
 
@@ -152,7 +154,7 @@ int main(int argc, const char *argv[]) {
             if (vocab.find_string(w)) {
                 id = vocab.from_string(w);
             } else {
-                id = vocab.from_string(n3ldg_plus::UNKNOWN_WORD);
+                id = vocab.from_string(insnet::UNKNOWN_WORD);
             }
             ids.push_back(id);
         }
@@ -169,7 +171,7 @@ int main(int argc, const char *argv[]) {
                 if (vocab.find_string(w)) {
                     id = vocab.from_string(w);
                 } else {
-                    id = vocab.from_string(n3ldg_plus::UNKNOWN_WORD);
+                    id = vocab.from_string(insnet::UNKNOWN_WORD);
                 }
                 ids.push_back(id);
             }
@@ -183,7 +185,7 @@ int main(int argc, const char *argv[]) {
                 if (vocab.find_string(w)) {
                     id = vocab.from_string(w);
                 } else {
-                    id = vocab.from_string(n3ldg_plus::UNKNOWN_WORD);
+                    id = vocab.from_string(insnet::UNKNOWN_WORD);
                 }
                 ids.push_back(id);
             }
@@ -204,7 +206,7 @@ int main(int argc, const char *argv[]) {
 
     dtype lr = args["lr"].as<dtype>();
     cout << fmt::format("lr:{}", lr) << endl;
-    n3ldg_plus::AdamOptimzer optimizer(params->tunableParams(), lr);
+    insnet::AdamOptimzer optimizer(params->tunableParams(), lr);
     int iteration = -1;
     const int BENCHMARK_BEGIN_ITER = 100;
 
@@ -267,7 +269,7 @@ int main(int argc, const char *argv[]) {
             profiler.EndEvent();
 
             graph.forward();
-            dtype loss = n3ldg_plus::NLLoss(probs, vocab.size(), answers, 1.0f);
+            dtype loss = insnet::NLLLoss(probs, vocab.size(), answers, 1.0f);
             if (iteration % 100 == 0) {
                 cout << fmt::format("loss:{} sentence number:{} ppl:{}", loss, sentence_size,
                         std::exp(loss / tgt_word_sum)) << endl;

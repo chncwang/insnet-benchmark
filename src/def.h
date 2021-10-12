@@ -1,5 +1,5 @@
-#ifndef N3LDG_PLUS_BENCHMARK_DEF_H
-#define N3LDG_PLUS_BENCHMARK_DEF_H
+#ifndef INSNET_BENCHMARK_DEF_H
+#define INSNET_BENCHMARK_DEF_H
 
 #include <string>
 

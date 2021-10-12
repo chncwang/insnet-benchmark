@@ -1,5 +1,5 @@
-#ifndef N3LDG_PLUS_BENCHMARK_DATA_MANAGER_H
-#define N3LDG_PLUS_BENCHMARK_DATA_MANAGER_H
+#ifndef INSNET_BENCHMARK_DATA_MANAGER_H
+#define INSNET_BENCHMARK_DATA_MANAGER_H
 
 #include <string>
 #include <unordered_map>
@@ -20,11 +20,13 @@
 #include "def.h"
 #include "fmt/core.h"
 
-std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename) {
+std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename, int max = 10000) {
     std::vector<PostAndResponses> results;
     std::string line;
     std::ifstream ifs(filename);
+    int i = 0;
     while (std::getline(ifs, line)) {
+        if (++i > max) break;
         std::vector<std::string> strs;
         boost::split(strs, line, boost::is_any_of(":"));
         if (strs.size() != 2) {

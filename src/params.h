@@ -1,19 +1,19 @@
-#ifndef N3LDG_PLUS_BENCHMARK_PARAMS_H
-#define N3LDG_PLUS_BENCHMARK_PARAMS_H
+#ifndef INSNET_BENCHMARK_PARAMS_H
+#define INSNET_BENCHMARK_PARAMS_H
 
-#include "n3ldg-plus/n3ldg-plus.h"
+#include "insnet/insnet.h"
 
-class ModelParams : public n3ldg_plus::TunableParamCollection
+class ModelParams : public insnet::TunableParamCollection
 #if USE_GPU
-, public n3ldg_plus::cuda::TransferableComponents
+, public insnet::cuda::TransferableComponents
 #endif
 {
 public:
-    void init(const n3ldg_plus::Vocab &vocab, int hidden_dim, int layer) {
+    void init(const insnet::Vocab &vocab, int hidden_dim, int layer) {
         embedding.init(vocab, hidden_dim);
     }
 
-    n3ldg_plus::Embedding<n3ldg_plus::Param> embedding;
+    insnet::Embedding<insnet::Param> embedding;
 };
 
 #endif
