@@ -5,11 +5,12 @@
 
 class TransformerParams : public ModelParams {
 public:
-    void init(const insnet::Vocab &vocab, int hidden_dim, int layer, int head) {
-        ModelParams::init(vocab, hidden_dim, layer);
+    void init(const insnet::Vocab &src_vocab, const insnet::Vocab &tgt_vocab, int hidden_dim,
+            int layer, int head) {
+        ModelParams::init(src_vocab, tgt_vocab, hidden_dim, layer);
 
-        encoder.init(layer, hidden_dim, head, 100);
-        decoder.init(layer, hidden_dim, head, 100);
+        encoder.init(layer, hidden_dim, head, 1024);
+        decoder.init(layer, hidden_dim, head, 1024);
     }
 
     insnet::TransformerEncoderParams encoder;
@@ -17,13 +18,13 @@ public:
 
 #if USE_GPU
     std::vector<insnet::cuda::Transferable *> transferablePtrs() override {
-        return {&embedding, &encoder, &decoder};
+        return {&src_embedding, &tgt_embedding, &encoder, &decoder};
     }
 #endif
 
 protected:
     virtual std::vector<insnet::TunableParam *> tunableComponents() override {
-        return {&embedding, &encoder, &decoder};
+        return {&src_embedding, &tgt_embedding, &encoder, &decoder};
     }
 };
 

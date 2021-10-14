@@ -9,11 +9,14 @@ class ModelParams : public insnet::TunableParamCollection
 #endif
 {
 public:
-    void init(const insnet::Vocab &vocab, int hidden_dim, int layer) {
-        embedding.init(vocab, hidden_dim);
+    void init(const insnet::Vocab &src_vocab, const insnet::Vocab &tgt_vocab, int hidden_dim,
+            int layer) {
+        src_embedding.init(src_vocab, hidden_dim);
+        tgt_embedding.init(tgt_vocab, hidden_dim);
     }
 
-    insnet::Embedding<insnet::Param> embedding;
+    insnet::Embedding<insnet::Param> src_embedding;
+    insnet::Embedding<insnet::Param> tgt_embedding;
 };
 
 #endif

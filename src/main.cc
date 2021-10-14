@@ -15,6 +15,7 @@
 #include <string>
 #include <mutex>
 #include <atomic>
+#include <queue>
 #include "conversation_structure.h"
 #include "data_manager.h"
 #include "params.h"
@@ -27,6 +28,7 @@ using std::string;
 using std::cout;
 using std::endl;
 using std::vector;
+using std::priority_queue;
 using std::unordered_map;
 using std::unordered_set;
 using std::unique_ptr;
@@ -47,6 +49,51 @@ using insnet::Node;
 using insnet::Profiler;
 
 constexpr int MODEL_TYPE_TRANSFORMER = 0;
+
+vector<string> filterWordList(const unordered_map <string, int> &table, int k) {
+    auto cmp = [&table](const string *a, const string *b) {
+        return table.at(*a) > table.at(*b);
+    };
+
+    vector<const string *> keys;
+    for (const auto &it : table) {
+        keys.push_back(&it.first);
+    }
+
+    priority_queue<const string *, vector<const string *>, decltype(cmp)> queue(cmp);
+    for (const string *key : keys) {
+        if (queue.size() < k) {
+            queue.push(key);
+        } else if (table.at(*queue.top()) < table.at(*key)) {
+            queue.pop();
+            queue.push(key);
+        }
+    }
+
+    vector<string> ret;
+    while (!queue.empty()) {
+        const string *e = queue.top();
+        ret.push_back(*e);
+        queue.pop();
+    }
+    cout << fmt::format("ret size:{}", ret.size()) << endl;
+    return ret;
+}
+
+unordered_map<string, int> calWordFreq(const vector<vector<string>> &sentences) {
+    unordered_map<string, int> ret;
+    for (const auto &s : sentences) {
+        for (const string &w : s) {
+            auto it = ret.find(w);
+            if (it == ret.end()) {
+                ret.insert(make_pair(w, 1));
+            } else {
+                it->second++;
+            }
+        }
+    }
+    return ret;
+}
 
 pair<float, float> sentenceLenStat(const vector<vector<string>> &sentences) {
     float sum = 0;
@@ -82,6 +129,8 @@ int main(int argc, const char *argv[]) {
         ("layer", "layer", cxxopts::value<int>()->default_value("3"))
         ("head", "head", cxxopts::value<int>()->default_value("8"))
         ("hidden_dim", "hidden dim", cxxopts::value<int>()->default_value("512"))
+        ("src_vocab_size", "src vocab size", cxxopts::value<int>()->default_value("10000"))
+        ("tgt_vocab_size", "tgt vocab size", cxxopts::value<int>()->default_value("10000"))
         ("cutoff", "cutoff", cxxopts::value<int>()->default_value("0"));
 
     auto args = options.parse(argc, argv);
@@ -96,7 +145,7 @@ int main(int argc, const char *argv[]) {
     string train_pair_file = args["train"].as<string>();
 
     vector<PostAndResponses> train_post_and_responses = readPostAndResponsesVector(
-            train_pair_file);
+            train_pair_file, 10000000);
     vector<ConversationPair> train_conversation_pairs = toConversationPairs(
             train_post_and_responses);
 
@@ -111,39 +160,23 @@ int main(int argc, const char *argv[]) {
     auto res_stat = sentenceLenStat(response_sentences);
     cout << fmt::format("response mean:{} sd:{}", res_stat.first, res_stat.second) << endl;
 
-    vector<vector<string> *> all_sentences;
-    for (auto &p : train_conversation_pairs) {
-        auto &s = response_sentences.at(p.response_id);
-        all_sentences.push_back(&s);
-        auto &s2 = post_sentences.at(p.post_id);
-        all_sentences.push_back(&s2);
-    }
+    unordered_map<string, int> src_word_count_map = calWordFreq(post_sentences);
+    int src_vocab_size = args["src_vocab_size"].as<int>();
+    vector<string> word_list = filterWordList(src_word_count_map, src_vocab_size);
+    word_list.push_back(insnet::UNKNOWN_WORD);
 
-    unordered_map<string, int> word_count_map;
-    for (const auto &s : all_sentences) {
-        for (const string &w : *s) {
-            auto it = word_count_map.find(w);
-            if (it == word_count_map.end()) {
-                word_count_map.insert(make_pair(w, 1));
-            } else {
-                it->second++;
-            }
-        }
-    }
+    Vocab src_vocab;
+    src_vocab.init(word_list);
 
-    int cutoff = args["cutoff"].as<int>();
-    vector<string> word_list;
-    for (const auto &it : word_count_map) {
-        if (it.second >= cutoff) {
-            word_list.push_back(it.first);
-        }
-    }
+    int tgt_vocab_size = args["tgt_vocab_size"].as<int>();
+    unordered_map<string, int> tgt_word_count_map = calWordFreq(response_sentences);
+    word_list = filterWordList(tgt_word_count_map, tgt_vocab_size);
     word_list.push_back(insnet::UNKNOWN_WORD);
     word_list.push_back(BEGIN_SYMBOL);
     word_list.push_back(STOP_SYMBOL);
 
-    Vocab vocab;
-    vocab.init(word_list);
+    Vocab tgt_vocab;
+    tgt_vocab.init(word_list);
 
     vector<vector<int>> src_ids, tgt_in_ids, tgt_out_ids;
     for (const auto &s : post_sentences) {
@@ -151,10 +184,10 @@ int main(int argc, const char *argv[]) {
         ids.reserve(s.size());
         for (const auto &w : s) {
             int id;
-            if (vocab.find_string(w)) {
-                id = vocab.from_string(w);
+            if (src_vocab.find_string(w)) {
+                id = src_vocab.from_string(w);
             } else {
-                id = vocab.from_string(insnet::UNKNOWN_WORD);
+                id = src_vocab.from_string(insnet::UNKNOWN_WORD);
             }
             ids.push_back(id);
         }
@@ -164,14 +197,14 @@ int main(int argc, const char *argv[]) {
         {
             vector<int> ids;
             ids.reserve(s.size());
-            ids.push_back(vocab.from_string(BEGIN_SYMBOL));
+            ids.push_back(tgt_vocab.from_string(BEGIN_SYMBOL));
             for (int i = 0; i < s.size(); ++i) {
                 const auto &w = s.at(i);
                 int id;
-                if (vocab.find_string(w)) {
-                    id = vocab.from_string(w);
+                if (tgt_vocab.find_string(w)) {
+                    id = tgt_vocab.from_string(w);
                 } else {
-                    id = vocab.from_string(insnet::UNKNOWN_WORD);
+                    id = tgt_vocab.from_string(insnet::UNKNOWN_WORD);
                 }
                 ids.push_back(id);
             }
@@ -182,14 +215,14 @@ int main(int argc, const char *argv[]) {
             for (int i = 0; i < s.size(); ++i) {
                 const auto &w = s.at(i);
                 int id;
-                if (vocab.find_string(w)) {
-                    id = vocab.from_string(w);
+                if (tgt_vocab.find_string(w)) {
+                    id = tgt_vocab.from_string(w);
                 } else {
-                    id = vocab.from_string(insnet::UNKNOWN_WORD);
+                    id = tgt_vocab.from_string(insnet::UNKNOWN_WORD);
                 }
                 ids.push_back(id);
             }
-            ids.push_back(vocab.from_string(STOP_SYMBOL));
+            ids.push_back(tgt_vocab.from_string(STOP_SYMBOL));
             tgt_out_ids.push_back(move(ids));
         }
     }
@@ -201,12 +234,13 @@ int main(int argc, const char *argv[]) {
     if (model_type == 0) {
         int head = args["head"].as<int>();
         params = make_unique<TransformerParams>();
-        dynamic_cast<TransformerParams &>(*params).init(vocab, hidden_dim, layer, head);
+        dynamic_cast<TransformerParams &>(*params).init(src_vocab, tgt_vocab, hidden_dim, layer,
+                head);
     }
 
     dtype lr = args["lr"].as<dtype>();
     cout << fmt::format("lr:{}", lr) << endl;
-    insnet::AdamOptimzer optimizer(params->tunableParams(), lr);
+    insnet::AdamOptimizer optimizer(params->tunableParams(), lr);
     int iteration = -1;
     const int BENCHMARK_BEGIN_ITER = 100;
 
@@ -234,7 +268,7 @@ int main(int argc, const char *argv[]) {
             int word_sum = 0;
             int tgt_word_sum = 0;
 
-            Graph graph;
+            Graph graph(insnet::ModelStage::TRAINING, false);
             vector<Node *> probs;
             vector<vector<int>> answers;
 
@@ -269,7 +303,7 @@ int main(int argc, const char *argv[]) {
             profiler.EndEvent();
 
             graph.forward();
-            dtype loss = insnet::NLLLoss(probs, vocab.size(), answers, 1.0f);
+            dtype loss = insnet::NLLLoss(probs, tgt_vocab.size(), answers, 1.0f);
             if (iteration % 100 == 0) {
                 cout << fmt::format("loss:{} sentence number:{} ppl:{}", loss, sentence_size,
                         std::exp(loss / tgt_word_sum)) << endl;
@@ -286,6 +320,8 @@ int main(int argc, const char *argv[]) {
                         begin_time);
                 float word_count_per_sec = 1e3 * word_sum_for_benchmark /
                     static_cast<float>(elapsed_time.count());
+                cout << fmt::format("begin:{} now:{}", begin_time.time_since_epoch().count(),
+                        now.time_since_epoch().count());
                 cout << fmt::format("epoch:{} iteration:{} word_count_per_sec:{} word count:{} time:{} step time:{}",
                         epoch, iteration, word_count_per_sec, word_sum_for_benchmark,
                         elapsed_time.count(),
