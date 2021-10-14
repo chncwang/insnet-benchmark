@@ -20,7 +20,7 @@
 #include "def.h"
 #include "fmt/core.h"
 
-std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename, int max = 10000) {
+std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename, int max = 100000000) {
     std::vector<PostAndResponses> results;
     std::string line;
     std::ifstream ifs(filename);
