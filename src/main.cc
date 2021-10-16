@@ -206,7 +206,7 @@ int main(int argc, const char *argv[]) {
 
     dtype lr = args["lr"].as<dtype>();
     cout << fmt::format("lr:{}", lr) << endl;
-    insnet::AdamOptimzer optimizer(params->tunableParams(), lr);
+    insnet::AdamOptimizer optimizer(params->tunableParams(), lr);
     int iteration = -1;
     const int BENCHMARK_BEGIN_ITER = 100;
 
@@ -268,13 +268,19 @@ int main(int argc, const char *argv[]) {
             }
             profiler.EndEvent();
 
+            profiler.BeginEvent("forward total");
             graph.forward();
+            profiler.EndEvent();
+            profiler.BeginEvent("loss");
             dtype loss = insnet::NLLLoss(probs, vocab.size(), answers, 1.0f);
+            profiler.EndCudaEvent();
             if (iteration % 100 == 0) {
                 cout << fmt::format("loss:{} sentence number:{} ppl:{}", loss, sentence_size,
                         std::exp(loss / tgt_word_sum)) << endl;
             }
+            profiler.BeginEvent("backward total");
             graph.backward();
+            profiler.EndEvent();
             profiler.BeginEvent("optimize");
             optimizer.step();
             profiler.EndCudaEvent();

@@ -18,7 +18,7 @@ insnet::Node *transformerSeq2seq(const std::vector<int> &src_ids,
     Node *dec = insnet::transformerDecoder(*enc, *dec_emb, transformer_params.decoder,
             dropout).back();
     dec = insnet::linear(*dec, params.embedding.E);
-    dec = insnet::softmax(*dec, params.embedding.size());
+    dec = insnet::logSoftmax(*dec, params.embedding.size());
     return dec;
 }
 
